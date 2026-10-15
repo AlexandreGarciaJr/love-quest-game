@@ -24,7 +24,7 @@ export const content = {
   shareLine: 'Um jogo para compartilhar com seu amor 💗',
   credits: {
     label: 'feito com 💗 por Alexandre Garcia',
-    href: 'https://github.com/AlexandreGarciaJr',
+    href: 'https://alexandregarcia.dev/',
     portfolioLabel: 'Conheça meu portfólio →',
     portfolioHref: 'https://alexandregarcia.dev/',
   },

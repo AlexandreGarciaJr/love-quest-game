@@ -1,5 +1,4 @@
-// Som 100% gerado no navegador (Web Audio), sem arquivos.
-// Se existir public/music.mp3, ele toca no lugar do chiptune.
+// Efeitos sonoros gerados no navegador (Web Audio) e trilha sonora em MP3 (public/music/).
 
 type Sfx = 'tap' | 'pop' | 'boing' | 'error' | 'success' | 'fanfare' | 'jump' | 'doubleJump' | 'stomp' | 'die' | 'checkpoint' | 'dash' | 'letter' | 'punch';
 
@@ -7,9 +6,7 @@ const STORAGE_KEY = 'love-quest:sound';
 
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
-let musicGain: GainNode | null = null;
 let enabled = readPreference();
-let musicTimer: number | null = null;
 
 function readPreference(): boolean {
   try {
@@ -31,9 +28,6 @@ function ensureContext(): AudioContext | null {
   master = ctx.createGain();
   master.gain.value = 0.5;
   master.connect(ctx.destination);
-  musicGain = ctx.createGain();
-  musicGain.gain.value = 0.22;
-  musicGain.connect(master);
   return ctx;
 }
 
@@ -125,121 +119,49 @@ export function playSfx(name: Sfx): void {
 }
 
 // --- Música --------------------------------------------------------------
-// Uma trilha chiptune por ambiente, gerada a partir de acordes + um padrão de arpejo.
-// Para usar uma faixa própria, coloque public/music-<tema>.mp3 (ou public/music.mp3 para todas).
+// As faixas de public/music/ tocam em sequência, em loop, durante o jogo todo.
+// Músicas: "Love" e "Love Love Music", de nastelbom (Pixabay Content License).
 
 export type MusicTheme = 'map' | 'sky' | 'garden' | 'city' | 'boss' | 'final';
 
-interface Track {
-  bpm: number;
-  /** [nota MIDI da fundamental, menor?] — um acorde por compasso. */
-  chords: [number, boolean][];
-  /** 8 colcheias por compasso: índice da nota do acorde (0-3) ou -1 para pausa. */
-  pattern: number[];
-  lead: OscillatorType;
-  leadVol: number;
-  /** Baixo pulando oitava em vez de nota longa. */
-  bounce: boolean;
+const PLAYLIST = ['/music/love-1.mp3', '/music/love-2.mp3'];
+const MUSIC_VOLUME = 0.4;
+
+let player: HTMLAudioElement | null = null;
+let trackIndex = 0;
+
+function nextTrack(): void {
+  if (!player) return;
+  trackIndex = (trackIndex + 1) % PLAYLIST.length;
+  player.src = PLAYLIST[trackIndex];
+  if (enabled) void player.play().catch(() => undefined);
 }
 
-const TRACKS: Record<MusicTheme, Track> = {
-  map: { bpm: 112, chords: [[60, false], [55, false], [57, true], [53, false]], pattern: [0, 1, 2, 3, 2, 1, 2, -1], lead: 'square', leadVol: 0.12, bounce: false },
-  sky: { bpm: 100, chords: [[53, false], [60, false], [62, true], [58, false]], pattern: [0, -1, 2, 1, 3, -1, 2, 1], lead: 'triangle', leadVol: 0.22, bounce: false },
-  garden: { bpm: 126, chords: [[60, false], [65, false], [67, false], [60, false]], pattern: [3, 2, 1, 2, 0, 2, 1, 2], lead: 'square', leadVol: 0.1, bounce: true },
-  city: { bpm: 108, chords: [[57, true], [53, false], [60, false], [55, false]], pattern: [0, 2, 3, 2, 1, -1, 2, 1], lead: 'square', leadVol: 0.1, bounce: true },
-  boss: { bpm: 150, chords: [[52, true], [48, false], [50, false], [47, false]], pattern: [0, 1, 2, 1, 0, 1, 3, 1], lead: 'sawtooth', leadVol: 0.06, bounce: true },
-  final: { bpm: 84, chords: [[60, false], [57, true], [53, false], [55, false]], pattern: [0, -1, 2, -1, 1, -1, 3, -1], lead: 'triangle', leadVol: 0.24, bounce: false },
-};
+function getPlayer(): HTMLAudioElement {
+  if (player) return player;
+  player = new Audio(PLAYLIST[trackIndex]);
+  player.preload = 'auto';
+  player.volume = MUSIC_VOLUME;
+  player.addEventListener('ended', nextTrack);
+  return player;
+}
 
-const midiFreq = (m: number) => 440 * 2 ** ((m - 69) / 12);
-
-let currentTheme: MusicTheme = 'map';
-let mp3: HTMLAudioElement | null = null;
-const mp3Cache = new Map<string, boolean>();
-
-/** Troca a trilha (chamado ao entrar em cada cena). */
-export function setMusicTheme(theme: MusicTheme): void {
-  if (theme === currentTheme && (musicTimer !== null || mp3)) return;
-  currentTheme = theme;
-  stopMusic();
-  mp3 = null;
+/**
+ * Chamado ao entrar em cada cena. A trilha é a mesma em todas as cenas e continua
+ * de onde parou; o tema fica como ponto de troca caso cada cena ganhe a sua música.
+ */
+export function setMusicTheme(_theme: MusicTheme): void {
   startMusic();
 }
 
 function startMusic(): void {
   if (!enabled) return;
-  if (mp3) {
-    void mp3.play().catch(() => undefined);
-    return;
-  }
-  const c = ensureContext();
-  if (!c || musicTimer !== null) return;
-  if (c.state === 'suspended') void c.resume();
-  void tryLoadMp3(currentTheme);
-
-  const track = TRACKS[currentTheme];
-  const step = 60 / track.bpm / 2;
-  let i = 0;
-  let next = c.currentTime + 0.1;
-  const dest = () => musicGain ?? undefined;
-  const schedule = () => {
-    if (!ctx) return;
-    while (next < ctx.currentTime + 0.25) {
-      const bar = Math.floor(i / 8) % track.chords.length;
-      const beat = i % 8;
-      const [root, minor] = track.chords[bar];
-      const tones = [0, minor ? 3 : 4, 7, 12];
-      const idx = track.pattern[beat];
-      // Na segunda volta, a melodia sobe uma oitava em compassos alternados (menos repetitivo).
-      const lift = Math.floor(i / (8 * track.chords.length)) % 2 === 1 && bar % 2 === 1 ? 12 : 0;
-      if (idx >= 0) tone(midiFreq(root + 12 + tones[idx] + lift), next, step * 0.85, track.lead, track.leadVol, dest());
-      if (track.bounce) {
-        if (beat % 2 === 0) tone(midiFreq(root - 12 + (beat % 4 === 2 ? 12 : 0)), next, step * 0.9, 'triangle', 0.3, dest());
-      } else if (beat === 0) {
-        tone(midiFreq(root - 12), next, step * 7.5, 'triangle', 0.32, dest());
-      }
-      next += step;
-      i++;
-    }
-  };
-  schedule();
-  musicTimer = window.setInterval(schedule, 80);
+  const p = getPlayer();
+  if (p.paused) void p.play().catch(() => undefined);
 }
 
 function stopMusic(): void {
-  if (musicTimer !== null) {
-    window.clearInterval(musicTimer);
-    musicTimer = null;
-  }
-  mp3?.pause();
-}
-
-async function hasAudio(url: string): Promise<boolean> {
-  if (mp3Cache.has(url)) return mp3Cache.get(url)!;
-  try {
-    const res = await fetch(url, { method: 'HEAD' });
-    const ok = res.ok && (res.headers.get('content-type') ?? '').startsWith('audio');
-    mp3Cache.set(url, ok);
-    return ok;
-  } catch {
-    mp3Cache.set(url, false);
-    return false;
-  }
-}
-
-/** Se existir um MP3 para o tema (ou geral), ele substitui o chiptune. */
-async function tryLoadMp3(theme: MusicTheme): Promise<void> {
-  const url = (await hasAudio(`/music-${theme}.mp3`)) ? `/music-${theme}.mp3` : (await hasAudio('/music.mp3')) ? '/music.mp3' : null;
-  if (!url || theme !== currentTheme) return;
-  const audio = new Audio(url);
-  audio.loop = true;
-  audio.volume = 0.35;
-  mp3 = audio;
-  if (musicTimer !== null) {
-    window.clearInterval(musicTimer);
-    musicTimer = null;
-  }
-  if (enabled) await audio.play().catch(() => undefined);
+  player?.pause();
 }
 
 /** Pausa a música quando a aba fica em segundo plano. */
@@ -248,9 +170,9 @@ export function handleVisibility(hidden: boolean): void {
   if (hidden) {
     stopMusic();
     void ctx?.suspend();
-  } else if (ctx) {
-    void ctx.resume();
-    startMusic();
+  } else {
+    void ctx?.resume();
+    if (player) startMusic();
   }
 }
 

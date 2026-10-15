@@ -71,7 +71,7 @@ O projeto é um site estático (Vite). Com o repositório conectado à Vercel, c
 - **Fases**: [`src/game/levels/`](src/game/levels/). Cada fase é uma lista de chamadas como `b.ground(0, 22)`, `b.cloud(52, 3, 3)`, `b.enemy(42, 2)`.
 - **Física do pulo**: [`src/game/config.ts`](src/game/config.ts).
 - **Cores**: variáveis CSS no topo de [`src/styles.css`](src/styles.css).
-- **Música**: cada ambiente (mapa, céu, jardim, cidade, chefão, final) tem um chiptune gerado em código (Web Audio, sem arquivos). Para usar faixas próprias, coloque `public/music-<tema>.mp3` (ex.: `music-boss.mp3`) ou `public/music.mp3` para todas. Use apenas músicas com licença livre (ex.: CC0).
+- **Música**: as faixas de `public/music/` tocam em sequência, em loop, durante o jogo todo. Para trocar, substitua os arquivos ou edite a lista `PLAYLIST` em [`src/audio.ts`](src/audio.ts). Os efeitos sonoros continuam gerados em código (Web Audio).
 - **Cartas secretas**: as frases extras ficam em `letterLines` em [`src/content.ts`](src/content.ts).
 - **Créditos**: link do rodapé em `content.credits`.
 
@@ -110,6 +110,7 @@ src/
 ## 🙏 Créditos
 
 - Blocos e cenário: [Kenney](https://kenney.nl), pacotes Pixel Platformer e Tiny Town, licença CC0 (veja `public/assets/kenney/*/License.txt`).
+- Música: "Love Love Music" e "Love", de [nastelbom](https://pixabay.com/music/search/nastelbom/) no Pixabay ([Pixabay Content License](https://pixabay.com/service/license-summary/)).
 
 ## 📄 Licença
 
@@ -117,4 +118,4 @@ src/
 
 ---
 
-Feito com 💗 por [Alexandre Garcia](https://github.com/AlexandreGarciaJr).
+Feito com 💗 por [Alexandre Garcia](https://alexandregarcia.dev/).
